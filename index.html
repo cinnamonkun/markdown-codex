@@ -12,7 +12,11 @@
   </style>
 </head>
 <body>
-  <div id="preview-root"></div>
+  <p>
+    <input id="file-input" type="file" accept=".md,.markdown,text/markdown">
+    <span>Markdownファイルを選択してください</span>
+  </p>
+  <div id="preview-root">ファイルを選択すると、ここにプレビューが表示されます。</div>
   <script type="module">
     import { activate } from './markdown-language-features/notebook-out/index.js';
     import katex from './markdown-math/notebook-out/katex.js';
@@ -74,13 +78,19 @@
 
     extendMarkdownIt(md => md.use(markdownItMath));
 
-    async function load() {
-      const resp = await fetch('./markdown-language-features/README.md');
-      const text = await resp.text();
-      renderOutputItem({ text: () => text, mime: 'text/markdown' }, document.getElementById('preview-root'));
-    }
+    const input = document.getElementById('file-input');
+    const preview = document.getElementById('preview-root');
 
-    load();
+    input.addEventListener('change', () => {
+      const file = input.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        preview.innerHTML = '';
+        renderOutputItem({ text: () => reader.result, mime: 'text/markdown' }, preview);
+      };
+      reader.readAsText(file);
+    });
   </script>
 </body>
 </html>
