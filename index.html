@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>VSCode Markdown Viewer</title>
+  <link id="_defaultStyles" rel="stylesheet" href="./markdown-language-features/media/markdown.css">
+  <link rel="stylesheet" class="markdown-style" href="./markdown-language-features/media/highlight.css">
+  <link rel="stylesheet" class="markdown-style" href="./markdown-math/notebook-out/katex.min.css">
+  <link rel="stylesheet" class="markdown-style" href="./markdown-math/preview-styles/index.css">
+  <style class="markdown-style">
+    body { margin: 0; padding: 0; }
+  </style>
+</head>
+<body>
+  <div id="preview-root"></div>
+  <script type="module">
+    import { activate } from './markdown-language-features/notebook-out/index.js';
+    import katex from './markdown-math/notebook-out/katex.js';
+
+    const { renderOutputItem, extendMarkdownIt } = activate({ workspace: { isTrusted: true } });
+
+    function markdownItMath(md) {
+      function inlineMath(state, silent) {
+        if (state.src[state.pos] !== '$') return false;
+        const start = state.pos + 1;
+        let end = start;
+        while ((end = state.src.indexOf('$', end)) !== -1) {
+          if (state.src[end - 1] !== '\\') break;
+          end++;
+        }
+        if (end === -1) return false;
+        if (!silent) {
+          const token = state.push('math_inline', 'math', 0);
+          token.content = state.src.slice(start, end);
+        }
+        state.pos = end + 1;
+        return true;
+      }
+
+      function blockMath(state, startLine, endLine, silent) {
+        let pos = state.bMarks[startLine] + state.tShift[startLine];
+        let max = state.eMarks[startLine];
+        if (pos + 2 > max) return false;
+        if (state.src.slice(pos, pos + 2) !== '$$') return false;
+        pos += 2;
+        let firstLine = state.src.slice(pos, max);
+        let nextLine = startLine;
+        let found = false;
+        while (!found) {
+          nextLine++;
+          if (nextLine >= endLine) return false;
+          pos = state.bMarks[nextLine] + state.tShift[nextLine];
+          max = state.eMarks[nextLine];
+          if (state.src.slice(pos, pos + 2) === '$$') {
+            found = true;
+            break;
+          }
+        }
+        if (silent) return true;
+        const content = firstLine + '\n' + state.getLines(startLine + 1, nextLine, state.tShift[startLine], true);
+        state.line = nextLine + 1;
+        const token = state.push('math_block', 'div', 0);
+        token.block = true;
+        token.content = content;
+        token.map = [startLine, state.line];
+        return true;
+      }
+
+      md.inline.ruler.after('escape', 'math_inline', inlineMath);
+      md.block.ruler.after('blockquote', 'math_block', blockMath, { alt: ['paragraph', 'reference', 'blockquote', 'list'] });
+      md.renderer.rules.math_inline = (tokens, idx) => katex.renderToString(tokens[idx].content);
+      md.renderer.rules.math_block = (tokens, idx) => '<p>' + katex.renderToString(tokens[idx].content, { displayMode: true }) + '</p>';
+    }
+
+    extendMarkdownIt(md => md.use(markdownItMath));
+
+    async function load() {
+      const resp = await fetch('./markdown-language-features/README.md');
+      const text = await resp.text();
+      renderOutputItem({ text: () => text, mime: 'text/markdown' }, document.getElementById('preview-root'));
+    }
+
+    load();
+  </script>
+</body>
+</html>
